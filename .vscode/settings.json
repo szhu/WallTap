@@ -1,3 +1,10 @@
 {
-  "deno.enable": true
+  "[cpp]": {
+    "editor.defaultFormatter": "xaver.clang-format"
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "denoland.vscode-deno"
+  },
+
+  "deno.enable": true,
 }

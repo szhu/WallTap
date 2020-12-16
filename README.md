@@ -27,8 +27,12 @@ This was my final project for the Introduction to Physical Computing class at NY
 
 ## Usage
 
-- **Physical circuit:** An Arduino's A1 pin is connected to a 10MΩ resistor, which is connected to both the A0 pin and the sensor. The sensor is any conductive material, which the user will be touching to activate the sensor.
+- **Circuit:** The circuit requires an Arduino plugged into the computer via USB. Wire the circuit according to the comment at the top of <WallTap.ino>. You may need to adjust the resistance based on your environment. The sensor is any conductive material, which the user will be touching to activate the sensor.
 
 - **Arduino code:** Load the following code into the Arduino: `WallTap.ino`
 
 - **Computer code:** This code currently only works on Mac, but the Mac-specific part is trivial. To use the code, install Deno (`brew install deno` or <https://deno.land/#installation>). The run `deno run --allow-run WallTap.ts`.
+
+When you start the Arduino, it will spend a few seconds calibrating. (The serial monitor or the Deno program will show you when it's calibrating.) During the calbration period, you should move your hand to be close to the sensor, but not touching it. This will make sure that the system knows that that level of capacitance corresponds to not touching the sensor.
+
+To re-calibrate, you can reset the Arduino by pressing the reset button on it.

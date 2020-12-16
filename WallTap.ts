@@ -1,11 +1,11 @@
 import { readLines } from "https://deno.land/std@0.77.0/io/bufio.ts";
 
-let textEncoder = new TextEncoder();
-let textDecoder = new TextDecoder();
+// let textEncoder = new TextEncoder();
+// let textDecoder = new TextDecoder();
 
-function fixedLine(line: string) {
-  return "\r\u001b[K" + line;
-}
+// function fixedLine(line: string) {
+//   return "\r\u001b[K" + line;
+// }
 
 async function osascript(script: string) {
   let process = Deno.run({
@@ -23,8 +23,8 @@ function serialProcess() {
 }
 
 interface Event {
-  type: "pressed" | "unpressed",
-  times: number,
+  type: "pressed" | "unpressed";
+  times: number;
 }
 
 async function isScreenSaverRunning() {
@@ -48,40 +48,42 @@ async function togglePlayback() {
 `);
 }
 
-
 async function run() {
-  console.log("Started!");
+  while (true) {
+    console.log("Started!");
 
-  let deferredSinglePress = false;
+    let deferredSinglePress = false;
+    let process = serialProcess();
+    for await (let line of readLines(process.stdout)) {
+      console.log(line);
 
-  let process = serialProcess();
-  for await (let line of readLines(process.stdout)) {
-    console.log(line);
+      if (!line) continue;
+      let event: Event = JSON.parse(line);
 
-    let event: Event = JSON.parse(line)
-
-    if (event.type === "pressed") {
-      if (event.times === 1) {
-        deferredSinglePress = true
+      if (event.type === "pressed") {
+        if (event.times === 1) {
+          deferredSinglePress = true;
+        } else if (event.times === 8) {
+          console.log("=> toggleScreenSaver()");
+          toggleScreenSaver();
+          deferredSinglePress = false;
+        }
       }
-      else if (event.times === 8) {
-        console.log("=> toggleScreenSaver()");
-        toggleScreenSaver()
-        deferredSinglePress = false
+
+      if (event.type === "unpressed") {
+        if (deferredSinglePress) {
+          console.log("=> togglePlayback()");
+          togglePlayback();
+          deferredSinglePress = false;
+        }
+
+        console.log();
       }
     }
 
-    if (event.type === "unpressed") {
-      if (deferredSinglePress) {
-        console.log("=> togglePlayback()");
-        togglePlayback()
-        deferredSinglePress = false
-      }
-
-      console.log()
-    }
+    console.log();
+    await new Promise((resolve) => setTimeout(resolve, 500));
   }
 }
-
 
 run();
