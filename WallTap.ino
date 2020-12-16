@@ -1,86 +1,129 @@
-void setup() {}
+#include <stdarg.h>
 
-#define N_LAST_SEEN 10
+#define DEBUG 0
 
-class RollingWindow {
-public:
-  int lastValues[N_LAST_SEEN] = {
-      //
-      -1, -1, -1, -1, -1,
-      //
-      -1, -1, -1, -1, -1,
-      //
-  };
-  int j = 0;
+/*
+ * Circuits:
+ * A0 -> 10kohm -> LED -> GND
+ * A0 -> 10Mohm -> Hand
+ * A0 -> 10Mohm -> A2 -> D transistor S -> GND
+ * A1 -> G transistor
+ */
 
-  void add(int value) {
-    lastValues[j] = value;
-    j++;
-    j %= N_LAST_SEEN;
-  }
-
-  int last2() {
-    return (lastValues[(j - 1 + N_LAST_SEEN) % N_LAST_SEEN] +
-            lastValues[(j - 2 + N_LAST_SEEN) % N_LAST_SEEN]) /
-           2;
-  }
-};
-
-RollingWindow a0RollingWindow = RollingWindow();
-RollingWindow a2RollingWindow = RollingWindow();
-
+/**
+ * Keeps track of a running average.
+ */
 class RunningAvg {
 public:
   int total = 0;
   int n = 0;
 
-  int add(int value) {
+  void add(int value) {
     total += value;
     n++;
   }
 
-  int getAvg() { return total / n; }
+  int get() { return total / n; };
 };
 
-int sinceLastA0Press = 0;
-int sinceLastA2Press = 0;
+/**
+ * Prints a horizontal bar illustrating the input value.
+ * It is scaled such that a value of max shows as a full bar.
+ */
+void printMeter(int value, int max) {
+  value = map(value, 0, max, 0, 50);
+  char out[] = "    1    2    3    4    5    6    7    8    9    X";
+  for (int i = 0; i < 50; i++) {
+    if (value >= i)
+      out[i] = '#';
+  }
+  Serial.print("| ");
+  Serial.print(out);
+  Serial.print(" |");
+}
+
+/**
+ * A printf implementation.
+ * https://playground.arduino.cc/Main/Printf/
+ */
+#define PRINTF_BUF_SIZE 128
+void p(char *fmt, ...) {
+  char buf[PRINTF_BUF_SIZE];
+  va_list args;
+  va_start(args, fmt);
+  vsnprintf(buf, PRINTF_BUF_SIZE, fmt, args);
+  va_end(args);
+  Serial.print(buf);
+}
+
+/* Main code below */
+
+int measure(int pin, int reps) {
+  RunningAvg avg = RunningAvg();
+  for (int i = 0; i < reps; i++) {
+    int level = analogRead(pin);
+    avg.add(level);
+
+#if DEBUG
+    printMeter(level, 1023);
+    Serial.println();
+#endif
+  }
+
+  return avg.get();
+}
+
+#define PIN_INPUT A0
+#define PIN_DRAIN A1
+#define PIN_OUTPUT A2
+
+#define TRIGGER_LEVEL 700
+#define DEBUG_LEVEL 720
+
+int pressedInARow = 0;
+
+void setup() {
+  //
+  analogWrite(PIN_INPUT, 1023);
+}
 
 void loop() {
-  analogWrite(A1, 0);
+  analogWrite(PIN_DRAIN, 1023);
+  // analogWrite(PIN_INPUT, 0);
 
-  RunningAvg a0Avg = RunningAvg();
-  RunningAvg a2Avg = RunningAvg();
-  for (int i = 0; i < 20; i++) {
-    a0Avg.add(analogRead(A0));
-    a2Avg.add(analogRead(A2));
-  }
+  delay(1);
 
-  int a0Reading = a0Avg.getAvg();
-  a0RollingWindow.add(a0Reading);
+  analogWrite(PIN_DRAIN, 0);
+  // analogWrite(PIN_INPUT, 1023);
 
-  int a0Base = 150;
-  int a0Diff = a0RollingWindow.last2() - a0Base;
-  if (a0Diff > 45) {
-    Serial.println(a0Diff);
-  }
-  int a0Pressed = a0Diff > 60;
-  if (a0Pressed && sinceLastA0Press > N_LAST_SEEN) {
-    Serial.print(a0Diff);
-    Serial.print(" (");
-    Serial.print(a0Base);
-    Serial.print(" -> ");
-    Serial.print(a0RollingWindow.last2());
-    Serial.print(") ");
-    Serial.print("sinceLastA0Press = ");
-    Serial.print(sinceLastA0Press);
-    if (sinceLastA0Press < N_LAST_SEEN + 5) {
-      Serial.print(" Held and");
+  int level = measure(PIN_OUTPUT, 100);
+
+#if DEBUG
+  p("<- %i %i ", level < TRIGGER_LEVEL, level);
+  printMeter(level, 1023);
+  Serial.println();
+#endif
+
+  if (level < TRIGGER_LEVEL) {
+    pressedInARow++;
+    p(R"({"type": "pressed", "times": %i, "level": %i})", pressedInARow, level);
+    p("\n");
+  } else {
+    if (pressedInARow > 0) {
+      p(R"({"type": "unpressed", "times": %i, "level": %i})", pressedInARow,
+        level);
+      p("\n");
+      pressedInARow = 0;
     }
-    Serial.println(" Pressed A0!!");
-    sinceLastA0Press = 0;
   }
-  sinceLastA0Press++;
 
-  analogWrite(A1, 1000);
-  delay(2);
+  if (level <= DEBUG_LEVEL && level > TRIGGER_LEVEL) {
+    p(R"({"type": "debug", "level": %i})", level);
+    p("\n");
+  }
+
+#if DEBUG
+  Serial.println();
+  delay(500);
+#endif
 }

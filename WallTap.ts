@@ -22,31 +22,66 @@ function serialProcess() {
   });
 }
 
-let ignore = false;
+interface Event {
+  type: "pressed" | "unpressed",
+  times: number,
+}
+
+async function isScreenSaverRunning() {
+  let process = Deno.run({ cmd: ["pgrep", "ScreenSaverEngine"] });
+  let status = await process.status();
+  return status.success;
+}
+
+async function toggleScreenSaver() {
+  if (await isScreenSaverRunning()) {
+    osascript(`quit app "ScreenSaverEngine"`);
+  } else {
+    Deno.run({ cmd: ["open", "-a", "ScreenSaverEngine"] });
+  }
+}
+
+async function togglePlayback() {
+  osascript(`
+  beep
+  tell app "Spotify" to playpause
+`);
+}
+
 
 async function run() {
+  console.log("Started!");
+
+  let deferredSinglePress = false;
+
   let process = serialProcess();
   for await (let line of readLines(process.stdout)) {
-    if (ignore) continue;
     console.log(line);
-    if (line.match(/Held and Pressed/)) {
-      await osascript(`
-        tell app "Spotify" to pause
-        do shell script "brightness 0"
-        quit app "Backdrop"
-        -- activate app "ScreenSaverEngine"
-      `);
-      ignore = true;
-      setTimeout(() => ignore = false, 2000);
-    } else if (line.match(/Pressed/)) {
-      osascript(`
-        beep
-        do shell script "brightness 0.7"
-        activate app "Backdrop"
-        tell app "Spotify" to playpause
-      `);
+
+    let event: Event = JSON.parse(line)
+
+    if (event.type === "pressed") {
+      if (event.times === 1) {
+        deferredSinglePress = true
+      }
+      else if (event.times === 8) {
+        console.log("=> toggleScreenSaver()");
+        toggleScreenSaver()
+        deferredSinglePress = false
+      }
+    }
+
+    if (event.type === "unpressed") {
+      if (deferredSinglePress) {
+        console.log("=> togglePlayback()");
+        togglePlayback()
+        deferredSinglePress = false
+      }
+
+      console.log()
     }
   }
 }
+
 
 run();
